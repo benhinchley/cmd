@@ -31,6 +31,7 @@ type Environment interface {
 	Env() []string
 	GetStdio() (io.Writer, io.Writer)
 	GetLoggers() (*log.Logger, *log.Logger)
+	GetDefaultContext() Context
 }
 
 type config struct {
@@ -47,6 +48,15 @@ func (c *config) GetStdio() (io.Writer, io.Writer) { return c.stdout, c.stderr }
 func (c *config) GetLoggers() (stdout *log.Logger, stderr *log.Logger) {
 	return log.New(c.stdout, "", 0), log.New(c.stderr, "", 0)
 }
+func (c *config) GetDefaultContext() Context {
+	stdout, stderr := c.GetLoggers()
+	return &defaultContext{stdout, stderr}
+}
+
+type defaultContext struct{ stdout, stderr *log.Logger }
+
+func (dc *defaultContext) Stdout() *log.Logger { return dc.stdout }
+func (dc *defaultContext) Stderr() *log.Logger { return dc.stderr }
 
 func NewProgram(name string, desc string, root Command, cmds []Command) (*Program, error) {
 	wd, err := os.Getwd()
