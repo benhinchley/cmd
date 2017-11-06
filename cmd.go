@@ -113,7 +113,7 @@ func (p *Program) ParseArgs(args []string) error {
 
 	p.config.args = args
 
-	help, command, exit := parseArgs(args)
+	help, command, exit := p.parseArgs(args)
 	if exit {
 		return fmt.Errorf(p.usage())
 	}
@@ -160,7 +160,7 @@ func (p *Program) Run(fn func(Environment, Command, []string) error) error {
 			return nil
 		}
 
-		if err := fs.Parse(p.config.args[2:]); err != nil {
+		if err := fs.Parse(p.config.args[1:]); err != nil {
 			return fmt.Errorf("%s: unable to parse arguments: %v", p.name, err)
 		}
 
@@ -206,9 +206,18 @@ func setCommandUsage(l *log.Logger, fs *flag.FlagSet, programName string, cmd Co
 	}
 }
 
-func parseArgs(args []string) (usage bool, cmd string, exit bool) {
+func (p *Program) parseArgs(args []string) (usage bool, cmd string, exit bool) {
 	isHelp := func(arg string) bool {
 		return strings.Contains(strings.ToLower(arg), "help") || strings.ToLower(arg) == "-h"
+	}
+
+	isCommand := func(arg string) bool {
+		for _, cmd := range p.commands {
+			if cmd.Name() == arg {
+				return true
+			}
+		}
+		return false
 	}
 
 	switch len(args) {
@@ -217,8 +226,15 @@ func parseArgs(args []string) (usage bool, cmd string, exit bool) {
 	case 2:
 		if isHelp(args[1]) {
 			exit = true
+		} else if isCommand(args[1]) {
+			cmd = args[1]
+		} else {
+			if p.root != nil {
+				cmd = "default"
+			} else {
+				cmd = args[1]
+			}
 		}
-		cmd = args[1]
 	default:
 		if isHelp(args[1]) {
 			cmd = args[2]
