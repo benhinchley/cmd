@@ -131,7 +131,7 @@ func (p *Program) Run(fn func(Environment, Command, []string) error) error {
 			fs.SetOutput(p.config.stderr)
 			cmd.Register(fs)
 
-			setCommandUsage(stderr, fs, p.name, cmd)
+			p.setCommandUsage(stderr, fs, cmd)
 			if p.printCmdHelp {
 				fs.Usage()
 				return nil
@@ -154,7 +154,7 @@ func (p *Program) Run(fn func(Environment, Command, []string) error) error {
 		fs.SetOutput(p.config.stderr)
 		p.root.Register(fs)
 
-		setCommandUsage(stderr, fs, p.name, p.root)
+		p.setCommandUsage(stderr, fs, p.root)
 		if p.printCmdHelp {
 			fs.Usage()
 			return nil
@@ -176,7 +176,7 @@ func (p *Program) Run(fn func(Environment, Command, []string) error) error {
 	return fmt.Errorf("%s: %s: no such command", p.name, p.calledCmd)
 }
 
-func setCommandUsage(l *log.Logger, fs *flag.FlagSet, programName string, cmd Command) {
+func (p *Program) setCommandUsage(l *log.Logger, fs *flag.FlagSet, cmd Command) {
 	var (
 		flags bool
 		fb    bytes.Buffer
@@ -194,7 +194,7 @@ func setCommandUsage(l *log.Logger, fs *flag.FlagSet, programName string, cmd Co
 	fw.Flush()
 
 	fs.Usage = func() {
-		l.Printf("Usage: %s %s %s\n", programName, cmd.Name(), cmd.Args())
+		l.Printf("Usage: %s %s %s\n", p.name, cmd.Name(), cmd.Args())
 		l.Println("")
 		l.Println(strings.TrimSpace(cmd.Help()))
 		l.Println("")
