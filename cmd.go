@@ -96,17 +96,30 @@ func (p *Program) ParseArgs(args []string) error {
 		if len(p.desc) > 0 {
 			fmt.Fprintln(&u, strings.TrimSpace(p.desc))
 		}
-		fmt.Fprintf(&u, "Usage: %s <command>\n", p.name)
-		fmt.Fprintln(&u, "")
-		fmt.Fprintln(&u, "Commands:")
-		fmt.Fprintln(&u, "")
-		w := tabwriter.NewWriter(&u, 0, 0, 2, ' ', 0)
-		for _, cmd := range p.commands {
-			fmt.Fprintf(w, "\t%s\t%s\n", cmd.Name(), cmd.Desc())
+
+		if len(p.commands) > 0 {
+			fmt.Fprintf(&u, "Usage: %s <command>\n", p.name)
+			fmt.Fprintln(&u, "")
+			fmt.Fprintln(&u, "Commands:")
+			fmt.Fprintln(&u, "")
+			w := tabwriter.NewWriter(&u, 0, 0, 2, ' ', 0)
+			if p.root != nil {
+				fmt.Fprintf(w, "\t[default]\t%s\n", p.root.Name())
+			}
+			for _, cmd := range p.commands {
+				fmt.Fprintf(w, "\t%s\t%s\n", cmd.Name(), cmd.Desc())
+			}
+			w.Flush()
+			fmt.Fprintln(&u, "")
+		} else {
+			fs := flag.NewFlagSet(p.root.Name(), flag.ContinueOnError)
+			p.root.Register(fs)
+			fmt.Fprintln(&u, strings.TrimSpace(p.createCommandUsage(fs, p.root)))
 		}
-		w.Flush()
-		fmt.Fprintln(&u, "")
-		fmt.Fprintf(&u, "Use \"%s help [command]\" for more information about a command.\n", p.name)
+
+		if len(p.commands) > 0 {
+			fmt.Fprintf(&u, "Use \"%s help [command]\" for more information about a command.\n", p.name)
+		}
 
 		return u.String()
 	}
@@ -131,7 +144,10 @@ func (p *Program) Run(fn func(Environment, Command, []string) error) error {
 			fs.SetOutput(p.config.stderr)
 			cmd.Register(fs)
 
-			p.setCommandUsage(stderr, fs, cmd)
+			fs.Usage = func() {
+				stderr.Print(p.createCommandUsage(fs, cmd))
+			}
+
 			if p.printCmdHelp {
 				fs.Usage()
 				return nil
@@ -154,7 +170,10 @@ func (p *Program) Run(fn func(Environment, Command, []string) error) error {
 		fs.SetOutput(p.config.stderr)
 		p.root.Register(fs)
 
-		p.setCommandUsage(stderr, fs, p.root)
+		fs.Usage = func() {
+			stderr.Print(p.createCommandUsage(fs, p.root))
+		}
+
 		if p.printCmdHelp {
 			fs.Usage()
 			return nil
@@ -176,8 +195,9 @@ func (p *Program) Run(fn func(Environment, Command, []string) error) error {
 	return fmt.Errorf("%s: %s: no such command", p.name, p.calledCmd)
 }
 
-func (p *Program) setCommandUsage(l *log.Logger, fs *flag.FlagSet, cmd Command) {
+func (p *Program) createCommandUsage(fs *flag.FlagSet, cmd Command) string {
 	var (
+		usage bytes.Buffer
 		flags bool
 		fb    bytes.Buffer
 		fw    = tabwriter.NewWriter(&fb, 0, 4, 2, ' ', 0)
@@ -193,17 +213,22 @@ func (p *Program) setCommandUsage(l *log.Logger, fs *flag.FlagSet, cmd Command) 
 	})
 	fw.Flush()
 
-	fs.Usage = func() {
-		l.Printf("Usage: %s %s %s\n", p.name, cmd.Name(), cmd.Args())
-		l.Println("")
-		l.Println(strings.TrimSpace(cmd.Help()))
-		l.Println("")
-		if flags {
-			l.Println("Flags:")
-			l.Println("")
-			l.Println(fb.String())
-		}
+	if p.root.Name() == cmd.Name() {
+		fmt.Fprintf(&usage, "Usage: %s %s\n", p.name, cmd.Args())
+	} else {
+		fmt.Fprintf(&usage, "Usage: %s %s %s\n", p.name, cmd.Name(), cmd.Args())
 	}
+
+	fmt.Fprintln(&usage, "")
+	fmt.Fprintln(&usage, strings.TrimSpace(cmd.Help()))
+	fmt.Fprintln(&usage, "")
+	if flags {
+		fmt.Fprintln(&usage, "Flags:")
+		fmt.Fprintln(&usage, "")
+		fmt.Fprintln(&usage, fb.String())
+	}
+
+	return usage.String()
 }
 
 func (p *Program) parseArgs(args []string) (usage bool, cmd string, exit bool) {
