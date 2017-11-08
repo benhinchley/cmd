@@ -126,13 +126,7 @@ func (p *Program) ParseArgs(args []string) error {
 
 	p.config.args = args
 
-	help, command, exit := p.parseArgs(args)
-	if exit {
-		return fmt.Errorf(p.usage())
-	}
-	p.calledCmd = command
-	p.printCmdHelp = help
-	return nil
+	return p.parseArgs(args)
 }
 
 func (p *Program) Run(fn func(Environment, Command, []string) error) error {
@@ -231,7 +225,7 @@ func (p *Program) createCommandUsage(fs *flag.FlagSet, cmd Command) string {
 	return usage.String()
 }
 
-func (p *Program) parseArgs(args []string) (usage bool, cmd string, exit bool) {
+func (p *Program) parseArgs(args []string) error {
 	isHelp := func(arg string) bool {
 		return strings.Contains(strings.ToLower(arg), "help") || strings.ToLower(arg) == "-h"
 	}
@@ -247,27 +241,29 @@ func (p *Program) parseArgs(args []string) (usage bool, cmd string, exit bool) {
 
 	switch len(args) {
 	case 0, 1:
-		cmd = "default"
+		p.calledCmd = "default"
 	case 2:
 		if isHelp(args[1]) {
-			exit = true
+			return fmt.Errorf(p.usage())
 		} else if isCommand(args[1]) {
-			cmd = args[1]
+			p.calledCmd = args[1]
+		} else if p.root != nil {
+			p.calledCmd = "default"
 		} else {
-			if p.root != nil {
-				cmd = "default"
-			} else {
-				cmd = args[1]
-			}
+			return fmt.Errorf("%s: %s: no such command", p.name, args[1])
 		}
 	default:
 		if isHelp(args[1]) {
-			cmd = args[2]
-			usage = true
+			p.calledCmd = args[2]
+			p.printCmdHelp = true
+		} else if isCommand(args[1]) {
+			p.calledCmd = args[1]
+		} else if p.root != nil {
+			p.calledCmd = "default"
 		} else {
-			cmd = args[1]
+			return fmt.Errorf("%s: %s: no such command", p.name, args[1])
 		}
 	}
 
-	return usage, cmd, exit
+	return nil
 }
