@@ -186,7 +186,7 @@ func (p *Program) Run(fn func(Environment, Command, []string) error) error {
 		return fmt.Errorf(p.usage())
 	}
 
-	return fmt.Errorf("%s: %s: no such command", p.name, p.calledCmd)
+	return nil
 }
 
 func (p *Program) createCommandUsage(fs *flag.FlagSet, cmd Command) string {
