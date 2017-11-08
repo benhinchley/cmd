@@ -25,31 +25,19 @@ type Command interface {
 	Run(Context, []string) error
 }
 
-type Environment interface {
-	WorkingDir() string
-	Args() []string
-	Env() []string
-	GetStdio() (io.Writer, io.Writer)
-	GetLoggers() (*log.Logger, *log.Logger)
-	GetDefaultContext() Context
-}
-
-type config struct {
-	wd             string
-	args           []string
-	env            []string
+type Environment struct {
+	WorkingDir     string
+	Args           []string
+	Env            []string
 	stdout, stderr io.Writer
 }
 
-func (c *config) WorkingDir() string               { return c.wd }
-func (c *config) Args() []string                   { return c.args }
-func (c *config) Env() []string                    { return c.env }
-func (c *config) GetStdio() (io.Writer, io.Writer) { return c.stdout, c.stderr }
-func (c *config) GetLoggers() (stdout *log.Logger, stderr *log.Logger) {
-	return log.New(c.stdout, "", 0), log.New(c.stderr, "", 0)
+func (e *Environment) GetStdio() (io.Writer, io.Writer) { return e.stdout, e.stderr }
+func (e *Environment) GetLoggers() (stdout *log.Logger, stderr *log.Logger) {
+	return log.New(e.stdout, "", 0), log.New(e.stderr, "", 0)
 }
-func (c *config) GetDefaultContext() Context {
-	stdout, stderr := c.GetLoggers()
+func (e *Environment) GetDefaultContext() Context {
+	stdout, stderr := e.GetLoggers()
 	return &defaultContext{stdout, stderr}
 }
 
@@ -57,6 +45,17 @@ type defaultContext struct{ stdout, stderr *log.Logger }
 
 func (dc *defaultContext) Stdout() *log.Logger { return dc.stdout }
 func (dc *defaultContext) Stderr() *log.Logger { return dc.stderr }
+
+type Program struct {
+	name         string
+	desc         string
+	root         Command
+	commands     []Command
+	env          *Environment
+	usage        func() string
+	calledCmd    string
+	printCmdHelp bool
+}
 
 func NewProgram(name string, desc string, root Command, cmds []Command) (*Program, error) {
 	wd, err := os.Getwd()
@@ -69,24 +68,13 @@ func NewProgram(name string, desc string, root Command, cmds []Command) (*Progra
 		desc:     desc,
 		root:     root,
 		commands: cmds,
-		config: &config{
-			wd:     wd,
-			env:    os.Environ(),
-			stdout: os.Stdout,
-			stderr: os.Stderr,
+		env: &Environment{
+			WorkingDir: wd,
+			Env:        os.Environ(),
+			stdout:     os.Stdout,
+			stderr:     os.Stderr,
 		},
 	}, nil
-}
-
-type Program struct {
-	name         string
-	desc         string
-	root         Command
-	commands     []Command
-	config       *config
-	usage        func() string
-	calledCmd    string
-	printCmdHelp bool
 }
 
 func (p *Program) ParseArgs(args []string) error {
@@ -124,18 +112,18 @@ func (p *Program) ParseArgs(args []string) error {
 		return u.String()
 	}
 
-	p.config.args = args
+	p.env.Args = args
 
 	return p.parseArgs(args)
 }
 
-func (p *Program) Run(fn func(Environment, Command, []string) error) error {
-	_, stderr := p.config.GetLoggers()
+func (p *Program) Run(fn func(*Environment, Command, []string) error) error {
+	_, stderr := p.env.GetLoggers()
 
 	for _, cmd := range p.commands {
 		if cmd.Name() == p.calledCmd {
 			fs := flag.NewFlagSet(p.calledCmd, flag.ContinueOnError)
-			fs.SetOutput(p.config.stderr)
+			fs.SetOutput(p.env.stderr)
 			cmd.Register(fs)
 
 			fs.Usage = func() {
@@ -147,11 +135,11 @@ func (p *Program) Run(fn func(Environment, Command, []string) error) error {
 				return nil
 			}
 
-			if err := fs.Parse(p.config.args[2:]); err != nil {
+			if err := fs.Parse(p.env.Args[2:]); err != nil {
 				return fmt.Errorf("")
 			}
 
-			if err := fn(p.config, cmd, fs.Args()); err != nil {
+			if err := fn(p.env, cmd, fs.Args()); err != nil {
 				return fmt.Errorf("%s: %v", p.name, err)
 			}
 
@@ -161,7 +149,7 @@ func (p *Program) Run(fn func(Environment, Command, []string) error) error {
 
 	if p.calledCmd == "default" && p.root != nil {
 		fs := flag.NewFlagSet(p.calledCmd, flag.ContinueOnError)
-		fs.SetOutput(p.config.stderr)
+		fs.SetOutput(p.env.stderr)
 		p.root.Register(fs)
 
 		fs.Usage = func() {
@@ -173,11 +161,11 @@ func (p *Program) Run(fn func(Environment, Command, []string) error) error {
 			return nil
 		}
 
-		if err := fs.Parse(p.config.args[1:]); err != nil {
+		if err := fs.Parse(p.env.Args[1:]); err != nil {
 			return fmt.Errorf("")
 		}
 
-		if err := fn(p.config, p.root, fs.Args()); err != nil {
+		if err := fn(p.env, p.root, fs.Args()); err != nil {
 			return fmt.Errorf("%s: %v", p.name, err)
 		}
 
