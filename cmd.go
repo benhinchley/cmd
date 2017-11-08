@@ -148,7 +148,7 @@ func (p *Program) Run(fn func(Environment, Command, []string) error) error {
 			}
 
 			if err := fs.Parse(p.config.args[2:]); err != nil {
-				return fmt.Errorf("%s: %s: unable to parse arguments: %v", p.name, p.calledCmd, err)
+				return fmt.Errorf("")
 			}
 
 			if err := fn(p.config, cmd, fs.Args()); err != nil {
@@ -174,7 +174,7 @@ func (p *Program) Run(fn func(Environment, Command, []string) error) error {
 		}
 
 		if err := fs.Parse(p.config.args[1:]); err != nil {
-			return fmt.Errorf("%s: unable to parse arguments: %v", p.name, err)
+			return fmt.Errorf("")
 		}
 
 		if err := fn(p.config, p.root, fs.Args()); err != nil {
