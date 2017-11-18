@@ -33,7 +33,7 @@ type Environment struct {
 }
 
 func (e *Environment) GetStdio() (io.Writer, io.Writer) { return e.stdout, e.stderr }
-func (e *Environment) GetLoggers() (stdout *log.Logger, stderr *log.Logger) {
+func (e *Environment) GetLoggers() (*log.Logger, *log.Logger) {
 	return log.New(e.stdout, "", 0), log.New(e.stderr, "", 0)
 }
 func (e *Environment) GetDefaultContext() Context {
@@ -81,13 +81,13 @@ func (p *Program) ParseArgs(args []string) error {
 	p.usage = func() string {
 		var u bytes.Buffer
 
-		if len(p.desc) > 0 {
-			fmt.Fprintln(&u, strings.TrimSpace(p.desc))
-		}
-
 		if len(p.commands) > 0 {
 			fmt.Fprintf(&u, "Usage: %s <command>\n", p.name)
 			fmt.Fprintln(&u, "")
+			if len(p.desc) > 0 {
+				fmt.Fprintln(&u, strings.TrimSpace(p.desc))
+				fmt.Fprintln(&u, "")
+			}
 			fmt.Fprintln(&u, "Commands:")
 			fmt.Fprintln(&u, "")
 			w := tabwriter.NewWriter(&u, 0, 0, 2, ' ', 0)
@@ -165,11 +165,7 @@ func (p *Program) Run(fn func(*Environment, Command, []string) error) error {
 			return fmt.Errorf("")
 		}
 
-		if err := fn(p.env, p.root, fs.Args()); err != nil {
-			return fmt.Errorf("%s: %v", p.name, err)
-		}
-
-		return nil
+		return fn(p.env, p.root, fs.Args())
 	} else if p.calledCmd == "default" && p.root == nil {
 		return fmt.Errorf(p.usage())
 	}
