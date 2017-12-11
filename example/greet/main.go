@@ -31,25 +31,24 @@ func main() {
 }
 
 type greetCommand struct {
-	priate bool
+	pirate bool
 }
 
-const greetHelp = `
-a friendly greeting in the terminal.
-`
+const greetHelp = "a friendly greeting in the terminal."
 
 func (cmd *greetCommand) Name() string { return "greet" }
 func (cmd *greetCommand) Args() string { return "[name]" }
 func (cmd *greetCommand) Desc() string { return "says hello" }
 func (cmd *greetCommand) Help() string { return strings.TrimSpace(greetHelp) }
 func (cmd *greetCommand) Register(fs *flag.FlagSet) {
-	fs.BoolVar(&cmd.priate, "pirate", false, "Say hello like a pirate")
+	fs.BoolVar(&cmd.pirate, "pirate", false, "Say hello like a pirate")
+	fs.BoolVar(&cmd.pirate, "p", false, "Say hello like a pirate")
 }
 
 func (cmd *greetCommand) Run(ctx cmd.Context, args []string) error {
 	greeting := "Hello, %s!"
 
-	if cmd.priate {
+	if cmd.pirate {
 		greeting = "Ahoy, %s!"
 	}
 
