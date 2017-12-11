@@ -181,16 +181,19 @@ func (p *Program) createCommandUsage(fs *flag.FlagSet, cmd Command) string {
 		fw    = tabwriter.NewWriter(&fb, 0, 4, 2, ' ', 0)
 	)
 
+	prettyDefaultValue := func(s string) (dv string) {
+		dv = s
+		if s == "" {
+			dv = "<none>"
+		}
+		return dv
+	}
+
 	hold := make(map[string]*flag.Flag)
 	fs.VisitAll(func(f *flag.Flag) {
 		flags = true
-		dv := f.DefValue
-		if dv == "" {
-			f.DefValue = "<none>"
-		}
-
 		if hf, ok := hold[f.Usage]; ok {
-			fmt.Fprintf(fw, "\t-%s -%s\t%s (default: %s)\n", hf.Name, f.Name, f.Usage, f.DefValue)
+			fmt.Fprintf(fw, "\t-%s -%s\t%s (default: %s)\n", hf.Name, f.Name, f.Usage, prettyDefaultValue(f.DefValue))
 			delete(hold, f.Usage)
 		} else {
 			hold[f.Usage] = f
@@ -198,7 +201,7 @@ func (p *Program) createCommandUsage(fs *flag.FlagSet, cmd Command) string {
 		}
 	})
 	for _, f := range hold {
-		fmt.Fprintf(fw, "\t-%s\t%s (default: %s)\n", f.Name, f.Usage, f.DefValue)
+		fmt.Fprintf(fw, "\t-%s\t%s (default: %s)\n", f.Name, f.Usage, prettyDefaultValue(f.DefValue))
 	}
 	fw.Flush()
 
