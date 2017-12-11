@@ -181,14 +181,25 @@ func (p *Program) createCommandUsage(fs *flag.FlagSet, cmd Command) string {
 		fw    = tabwriter.NewWriter(&fb, 0, 4, 2, ' ', 0)
 	)
 
+	hold := make(map[string]*flag.Flag)
 	fs.VisitAll(func(f *flag.Flag) {
 		flags = true
 		dv := f.DefValue
 		if dv == "" {
-			dv = "<none>"
+			f.DefValue = "<none>"
 		}
-		fmt.Fprintf(fw, "\t-%s\t%s (default: %s)\n", f.Name, f.Usage, dv)
+
+		if hf, ok := hold[f.Usage]; ok {
+			fmt.Fprintf(fw, "\t-%s -%s\t%s (default: %s)\n", hf.Name, f.Name, f.Usage, f.DefValue)
+			delete(hold, f.Usage)
+		} else {
+			hold[f.Usage] = f
+			return
+		}
 	})
+	for _, f := range hold {
+		fmt.Fprintf(fw, "\t-%s\t%s (default: %s)\n", f.Name, f.Usage, f.DefValue)
+	}
 	fw.Flush()
 
 	if p.root.Name() == cmd.Name() {
