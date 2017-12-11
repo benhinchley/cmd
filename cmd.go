@@ -147,7 +147,7 @@ func (p *Program) Run(fn func(*Environment, Command, []string) error) error {
 		}
 	}
 
-	if p.calledCmd == "default" && p.root != nil {
+	if p.calledCmd == defaultCommand && p.root != nil {
 		fs := flag.NewFlagSet(p.calledCmd, flag.ContinueOnError)
 		fs.SetOutput(p.env.stderr)
 		p.root.Register(fs)
@@ -166,7 +166,7 @@ func (p *Program) Run(fn func(*Environment, Command, []string) error) error {
 		}
 
 		return fn(p.env, p.root, fs.Args())
-	} else if p.calledCmd == "default" && p.root == nil {
+	} else if p.calledCmd == defaultCommand && p.root == nil {
 		return fmt.Errorf(p.usage())
 	}
 
@@ -209,6 +209,8 @@ func (p *Program) createCommandUsage(fs *flag.FlagSet, cmd Command) string {
 	return usage.String()
 }
 
+const defaultCommand = "default"
+
 func (p *Program) parseArgs(args []string) error {
 	isHelp := func(arg string) bool {
 		return strings.Contains(strings.ToLower(arg), "help") || strings.ToLower(arg) == "-h"
@@ -225,14 +227,14 @@ func (p *Program) parseArgs(args []string) error {
 
 	switch len(args) {
 	case 0, 1:
-		p.calledCmd = "default"
+		p.calledCmd = defaultCommand
 	case 2:
 		if isHelp(args[1]) {
 			return fmt.Errorf(p.usage())
 		} else if isCommand(args[1]) {
 			p.calledCmd = args[1]
 		} else if p.root != nil {
-			p.calledCmd = "default"
+			p.calledCmd = defaultCommand
 		} else {
 			return fmt.Errorf("%s: %s: no such command", p.name, args[1])
 		}
@@ -243,7 +245,7 @@ func (p *Program) parseArgs(args []string) error {
 		} else if isCommand(args[1]) {
 			p.calledCmd = args[1]
 		} else if p.root != nil {
-			p.calledCmd = "default"
+			p.calledCmd = defaultCommand
 		} else {
 			return fmt.Errorf("%s: %s: no such command", p.name, args[1])
 		}
