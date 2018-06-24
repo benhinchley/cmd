@@ -77,7 +77,7 @@ func NewProgram(name string, desc string, root Command, cmds []Command) (*Progra
 	}, nil
 }
 
-func (p *Program) ParseArgs(args []string) error {
+func (p *Program) createProgramUsage() {
 	p.usage = func() string {
 		var u bytes.Buffer
 
@@ -111,13 +111,15 @@ func (p *Program) ParseArgs(args []string) error {
 
 		return u.String()
 	}
-
-	p.env.Args = args
-
-	return p.parseArgs(args)
 }
 
-func (p *Program) Run(fn func(*Environment, Command, []string) error) error {
+func (p *Program) Run(args []string, fn func(*Environment, Command, []string) error) error {
+	p.createProgramUsage()
+	p.env.Args = args
+	if err := p.parseArgs(args); err != nil {
+		return err
+	}
+
 	_, stderr := p.env.GetLoggers()
 
 	for _, cmd := range p.commands {

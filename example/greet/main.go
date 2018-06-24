@@ -15,11 +15,7 @@ func main() {
 		fmt.Fprint(os.Stderr, err)
 		os.Exit(1)
 	}
-	if err := p.ParseArgs(os.Args); err != nil {
-		fmt.Fprint(os.Stderr, err)
-		os.Exit(1)
-	}
-	if err := p.Run(func(env *cmd.Environment, c cmd.Command, args []string) error {
+	if err := p.Run(os.Args, func(env *cmd.Environment, c cmd.Command, args []string) error {
 		if err := c.Run(env.GetDefaultContext(), args); err != nil {
 			return fmt.Errorf("%s: %v", c.Name(), err)
 		}
