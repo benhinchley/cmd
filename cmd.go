@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -11,9 +12,11 @@ import (
 	"text/tabwriter"
 )
 
+var Out = log.New(os.Stdout, "", 0)
+var Err = log.New(os.Stderr, "", 0)
+
 type Context interface {
-	Stdout() *log.Logger
-	Stderr() *log.Logger
+	WorkingDir() string
 }
 
 type Command interface {
@@ -33,18 +36,21 @@ type Environment struct {
 }
 
 func (e *Environment) GetStdio() (io.Writer, io.Writer) { return e.stdout, e.stderr }
-func (e *Environment) GetLoggers() (*log.Logger, *log.Logger) {
-	return log.New(e.stdout, "", 0), log.New(e.stderr, "", 0)
-}
 func (e *Environment) GetDefaultContext() Context {
-	stdout, stderr := e.GetLoggers()
-	return &defaultContext{stdout, stderr}
+	return &defaultContext{
+		wd: e.WorkingDir,
+	}
 }
 
-type defaultContext struct{ stdout, stderr *log.Logger }
+type defaultContext struct {
+	wd string // working directory
+}
 
-func (dc *defaultContext) Stdout() *log.Logger { return dc.stdout }
-func (dc *defaultContext) Stderr() *log.Logger { return dc.stderr }
+var _ Context = (*defaultContext)(nil)
+
+func (dc *defaultContext) WorkingDir() string {
+	return dc.wd
+}
 
 type Program struct {
 	name         string
@@ -63,7 +69,7 @@ func NewProgram(name string, desc string, root Command, cmds []Command) (*Progra
 		return nil, fmt.Errorf("unable to get working directory: %v", err)
 	}
 
-	return &Program{
+	p := &Program{
 		name:     name,
 		desc:     desc,
 		root:     root,
@@ -74,7 +80,11 @@ func NewProgram(name string, desc string, root Command, cmds []Command) (*Progra
 			stdout:     os.Stdout,
 			stderr:     os.Stderr,
 		},
-	}, nil
+	}
+
+	p.createProgramUsage()
+
+	return p, nil
 }
 
 func (p *Program) createProgramUsage() {
@@ -113,14 +123,13 @@ func (p *Program) createProgramUsage() {
 	}
 }
 
+var ErrParseArgs = errors.New("could not parse arguments")
+
 func (p *Program) Run(args []string, fn func(*Environment, Command, []string) error) error {
-	p.createProgramUsage()
 	p.env.Args = args
 	if err := p.parseArgs(args); err != nil {
 		return err
 	}
-
-	_, stderr := p.env.GetLoggers()
 
 	for _, cmd := range p.commands {
 		if cmd.Name() == p.calledCmd {
@@ -129,7 +138,7 @@ func (p *Program) Run(args []string, fn func(*Environment, Command, []string) er
 			cmd.Register(fs)
 
 			fs.Usage = func() {
-				stderr.Print(p.createCommandUsage(fs, cmd))
+				Err.Print(p.createCommandUsage(fs, cmd))
 			}
 
 			if p.printCmdHelp {
@@ -138,14 +147,12 @@ func (p *Program) Run(args []string, fn func(*Environment, Command, []string) er
 			}
 
 			if err := fs.Parse(p.env.Args[2:]); err != nil {
-				return fmt.Errorf("")
+				// XXX(@benhinchley): what the hell am i doing here
+				// fmt.Errorf("")
+				return ErrParseArgs
 			}
 
-			if err := fn(p.env, cmd, fs.Args()); err != nil {
-				return fmt.Errorf("%s: %v", p.name, err)
-			}
-
-			return nil
+			return fn(p.env, cmd, fs.Args())
 		}
 	}
 
@@ -155,7 +162,7 @@ func (p *Program) Run(args []string, fn func(*Environment, Command, []string) er
 		p.root.Register(fs)
 
 		fs.Usage = func() {
-			stderr.Print(p.createCommandUsage(fs, p.root))
+			Err.Print(p.createCommandUsage(fs, p.root))
 		}
 
 		if p.printCmdHelp {
@@ -164,15 +171,32 @@ func (p *Program) Run(args []string, fn func(*Environment, Command, []string) er
 		}
 
 		if err := fs.Parse(p.env.Args[1:]); err != nil {
-			return fmt.Errorf("")
+			// XXX(@benhinchley): what the hell am i doing here
+			// fmt.Errorf("")
+			return ErrParseArgs
 		}
 
 		return fn(p.env, p.root, fs.Args())
 	} else if p.calledCmd == defaultCommand && p.root == nil {
-		return fmt.Errorf(p.usage())
+		// XXX(@benhinchley): this should probably be wrapped in some
+		// sort of custom error type
+		return &ErrNoDefaultCommand{
+			usage: p.usage(),
+		}
 	}
 
 	return nil
+}
+
+// ErrNoDefaultCommand is returned when the default command is called but no command is provided to
+// handle it.
+type ErrNoDefaultCommand struct {
+	usage string
+}
+
+// Error implements the error interface
+func (e *ErrNoDefaultCommand) Error() string {
+	return e.usage
 }
 
 func (p *Program) createCommandUsage(fs *flag.FlagSet, cmd Command) string {
@@ -207,7 +231,7 @@ func (p *Program) createCommandUsage(fs *flag.FlagSet, cmd Command) string {
 	}
 	fw.Flush()
 
-	if p.root.Name() == cmd.Name() {
+	if p.root != nil && p.root.Name() == cmd.Name() {
 		fmt.Fprintf(&usage, "Usage: %s %s\n", p.name, cmd.Args())
 	} else {
 		fmt.Fprintf(&usage, "Usage: %s %s %s\n", p.name, cmd.Name(), cmd.Args())
@@ -252,7 +276,10 @@ func (p *Program) parseArgs(args []string) error {
 		} else if p.root != nil {
 			p.calledCmd = defaultCommand
 		} else {
-			return fmt.Errorf("%s: %s: no such command", p.name, args[1])
+			return &ErrNoSuchCommand{
+				programName: p.name,
+				commandName: args[1],
+			}
 		}
 	default:
 		if isHelp(args[1]) {
@@ -263,9 +290,23 @@ func (p *Program) parseArgs(args []string) error {
 		} else if p.root != nil {
 			p.calledCmd = defaultCommand
 		} else {
-			return fmt.Errorf("%s: %s: no such command", p.name, args[1])
+			return &ErrNoSuchCommand{
+				programName: p.name,
+				commandName: args[1],
+			}
 		}
 	}
 
 	return nil
+}
+
+// ErrNoSuchCommand is returned when the requested command is not found
+type ErrNoSuchCommand struct {
+	programName string
+	commandName string
+}
+
+// Error implements the error interface
+func (e *ErrNoSuchCommand) Error() string {
+	return fmt.Sprintf("%s: %s: no such command", e.programName, e.commandName)
 }
