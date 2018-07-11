@@ -12,8 +12,7 @@ import (
 func main() {
 	p, err := cmd.NewProgram("greet", "", &greetCommand{}, nil)
 	if err != nil {
-		fmt.Fprint(os.Stderr, err)
-		os.Exit(1)
+		cmd.Err.Fatal(err)
 	}
 	if err := p.Run(os.Args, func(env *cmd.Environment, c cmd.Command, args []string) error {
 		if err := c.Run(env.GetDefaultContext(), args); err != nil {
@@ -21,8 +20,7 @@ func main() {
 		}
 		return nil
 	}); err != nil {
-		fmt.Fprint(os.Stderr, err)
-		os.Exit(1)
+		cmd.Err.Fatal(err)
 	}
 }
 
@@ -30,29 +28,31 @@ type greetCommand struct {
 	pirate bool
 }
 
+var _ cmd.Command = (*greetCommand)(nil)
+
 const greetHelp = "a friendly greeting in the terminal."
 
-func (cmd *greetCommand) Name() string { return "greet" }
-func (cmd *greetCommand) Args() string { return "[name]" }
-func (cmd *greetCommand) Desc() string { return "says hello" }
-func (cmd *greetCommand) Help() string { return strings.TrimSpace(greetHelp) }
-func (cmd *greetCommand) Register(fs *flag.FlagSet) {
-	fs.BoolVar(&cmd.pirate, "pirate", false, "Say hello like a pirate")
-	fs.BoolVar(&cmd.pirate, "p", false, "Say hello like a pirate")
+func (c *greetCommand) Name() string { return "greet" }
+func (c *greetCommand) Args() string { return "[name]" }
+func (c *greetCommand) Desc() string { return "says hello" }
+func (c *greetCommand) Help() string { return strings.TrimSpace(greetHelp) }
+func (c *greetCommand) Register(fs *flag.FlagSet) {
+	fs.BoolVar(&c.pirate, "pirate", false, "Say hello like a pirate")
+	fs.BoolVar(&c.pirate, "p", false, "Say hello like a pirate")
 }
 
-func (cmd *greetCommand) Run(ctx cmd.Context, args []string) error {
+func (c *greetCommand) Run(ctx cmd.Context, args []string) error {
 	greeting := "Hello, %s!"
 
-	if cmd.pirate {
+	if c.pirate {
 		greeting = "Ahoy, %s!"
 	}
 
 	switch len(args) {
 	case 0:
-		ctx.Stdout().Printf(greeting, "there")
+		cmd.Out.Printf(greeting, "there")
 	default:
-		ctx.Stdout().Printf(greeting, args[0])
+		cmd.Out.Printf(greeting, args[0])
 	}
 
 	return nil
