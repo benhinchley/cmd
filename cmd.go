@@ -147,8 +147,6 @@ func (p *Program) Run(args []string, fn func(*Environment, Command, []string) er
 			}
 
 			if err := fs.Parse(p.env.Args[2:]); err != nil {
-				// XXX(@benhinchley): what the hell am i doing here
-				// fmt.Errorf("")
 				return ErrParseArgs
 			}
 
@@ -171,15 +169,11 @@ func (p *Program) Run(args []string, fn func(*Environment, Command, []string) er
 		}
 
 		if err := fs.Parse(p.env.Args[1:]); err != nil {
-			// XXX(@benhinchley): what the hell am i doing here
-			// fmt.Errorf("")
 			return ErrParseArgs
 		}
 
 		return fn(p.env, p.root, fs.Args())
 	} else if p.calledCmd == defaultCommand && p.root == nil {
-		// XXX(@benhinchley): this should probably be wrapped in some
-		// sort of custom error type
 		return &ErrNoDefaultCommand{
 			usage: p.usage(),
 		}
@@ -199,6 +193,15 @@ func (e *ErrNoDefaultCommand) Error() string {
 	return e.usage
 }
 
+// prettyDefaultValue sets the default value to `<none>` if it is blank
+func prettyDefaultValue(s string) (dv string) {
+	dv = s
+	if s == "" {
+		dv = "<none>"
+	}
+	return dv
+}
+
 func (p *Program) createCommandUsage(fs *flag.FlagSet, cmd Command) string {
 	var (
 		usage bytes.Buffer
@@ -206,14 +209,6 @@ func (p *Program) createCommandUsage(fs *flag.FlagSet, cmd Command) string {
 		fb    bytes.Buffer
 		fw    = tabwriter.NewWriter(&fb, 0, 4, 2, ' ', 0)
 	)
-
-	prettyDefaultValue := func(s string) (dv string) {
-		dv = s
-		if s == "" {
-			dv = "<none>"
-		}
-		return dv
-	}
 
 	hold := make(map[string]*flag.Flag)
 	fs.VisitAll(func(f *flag.Flag) {
@@ -251,27 +246,29 @@ func (p *Program) createCommandUsage(fs *flag.FlagSet, cmd Command) string {
 
 const defaultCommand = "default"
 
-func (p *Program) parseArgs(args []string) error {
-	isHelp := func(arg string) bool {
-		return strings.Contains(strings.ToLower(arg), "help") || strings.ToLower(arg) == "-h"
-	}
+// isHelp checks whether the provided args is for help
+func isHelp(arg string) bool {
+	return strings.Contains(strings.ToLower(arg), "help") || strings.ToLower(arg) == "-h"
+}
 
-	isCommand := func(arg string) bool {
-		for _, cmd := range p.commands {
-			if cmd.Name() == arg {
-				return true
-			}
+// isCommand checks if the provided arg is a command
+func isCommand(arg string, cmds []Command) bool {
+	for _, cmd := range cmds {
+		if cmd.Name() == arg {
+			return true
 		}
-		return false
 	}
+	return false
+}
 
+func (p *Program) parseArgs(args []string) error {
 	switch len(args) {
 	case 0, 1:
 		p.calledCmd = defaultCommand
 	case 2:
 		if isHelp(args[1]) {
 			return fmt.Errorf(p.usage())
-		} else if isCommand(args[1]) {
+		} else if isCommand(args[1], p.commands) {
 			p.calledCmd = args[1]
 		} else if p.root != nil {
 			p.calledCmd = defaultCommand
@@ -285,7 +282,7 @@ func (p *Program) parseArgs(args []string) error {
 		if isHelp(args[1]) {
 			p.calledCmd = args[2]
 			p.printCmdHelp = true
-		} else if isCommand(args[1]) {
+		} else if isCommand(args[1], p.commands) {
 			p.calledCmd = args[1]
 		} else if p.root != nil {
 			p.calledCmd = defaultCommand
